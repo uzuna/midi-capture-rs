@@ -77,7 +77,7 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> crate::Result<()> 
                 client: our_id,
                 port: our_port,
             });
-            println!("Reading from midi input {:?}", port);
+            log::info!("Reading from midi input {:?}", port);
             s.subscribe_port(&subs)?;
         }
     }
