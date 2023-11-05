@@ -1,5 +1,5 @@
 pub mod error;
-use alsa::seq;
+use alsa::seq::{self, EvCtrl};
 pub use error::{Error, Result};
 
 pub struct CaptureDevice {
@@ -83,4 +83,25 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> crate::Result<()> 
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EvKey {
+    channel: u8,
+    param: u32,
+}
+
+impl EvKey {
+    pub fn new(channel: u8, param: u32) -> Self {
+        Self { channel, param }
+    }
+}
+
+impl From<&EvCtrl> for EvKey {
+    fn from(ev: &EvCtrl) -> Self {
+        Self {
+            channel: ev.channel,
+            param: ev.param,
+        }
+    }
 }
