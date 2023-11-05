@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use hi_ctrl::EvKey;
+use midi_capture::{EvKey, CaptureDevice, CaptureGurad};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    let device = hi_ctrl::CaptureDevice::new(None)?;
+    let device = CaptureDevice::new(None)?;
     let mut guard = device.get()?;
     if args.len() > 1 && args[1] == "sync" {
         read_sync_frame(&mut guard, std::time::Duration::from_millis(500))
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn read_all(guard: &mut hi_ctrl::CaptureGurad) -> Result<(), Box<dyn std::error::Error>> {
+fn read_all(guard: &mut CaptureGurad) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         if let Some(ev) = guard.read_event()? {
             println!("{:?}", ev);
@@ -25,7 +25,7 @@ fn read_all(guard: &mut hi_ctrl::CaptureGurad) -> Result<(), Box<dyn std::error:
 }
 
 fn read_sync_frame(
-    guard: &mut hi_ctrl::CaptureGurad,
+    guard: &mut CaptureGurad,
     interval: std::time::Duration,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut next = std::time::Instant::now().checked_add(interval).unwrap();
