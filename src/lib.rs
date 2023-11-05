@@ -105,3 +105,43 @@ impl From<&EvCtrl> for EvKey {
         }
     }
 }
+
+pub enum CallcbackCtrl {
+    Continue,
+    Break,
+}
+
+/// Read all events from the capture device and call `f` for each event.
+pub fn read_all_cb(
+    guard: &mut CaptureGurad<'_>,
+    f: impl Fn(alsa::seq::Event) -> CallcbackCtrl,
+) -> crate::Result<()> {
+    loop {
+        if let Some(ev) = guard.read_event()? {
+            f(ev);
+        }
+    }
+}
+
+/// Read all events from the capture device and call `f` for each event.
+pub fn read_sync_cb(
+    guard: &mut CaptureGurad<'_>,
+    interval: std::time::Duration,
+    f: impl Fn(std::collections::HashMap<EvKey, i32>) -> CallcbackCtrl,
+) -> crate::Result<()> {
+    use std::collections::HashMap;
+    let mut next = std::time::Instant::now().checked_add(interval).unwrap();
+    let mut evt: HashMap<EvKey, i32> = HashMap::new();
+    loop {
+        if let Some(ev) = guard.read_event()? {
+            if let Some(data) = ev.get_data::<alsa::seq::EvCtrl>() {
+                evt.insert((&data).into(), data.value);
+            }
+        }
+        if next.elapsed() >= interval {
+            f(evt);
+            next = std::time::Instant::now().checked_add(interval).unwrap();
+            evt = HashMap::new();
+        }
+    }
+}
