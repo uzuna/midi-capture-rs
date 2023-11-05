@@ -29,7 +29,9 @@ impl Event {
             Some(Self::ChButton(key))
         } else if let Some(key) = Slider::from_midi(key, value) {
             Some(Self::Slider(key))
-        } else { Knob::from_midi(key, value).map(Self::Knob) }
+        } else {
+            Knob::from_midi(key, value).map(Self::Knob)
+        }
     }
 }
 

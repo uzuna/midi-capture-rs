@@ -3,7 +3,6 @@ use thiserror::Error as DeriveError;
 
 #[derive(DeriveError, Debug)]
 pub enum Error {
-    // NotFound(String),
     #[error("alsa error")]
     Alsa(#[from] alsa::Error),
 }
