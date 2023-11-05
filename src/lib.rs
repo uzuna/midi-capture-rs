@@ -4,6 +4,8 @@ use std::time::Duration;
 use alsa::seq::{self, EvCtrl};
 pub use error::{Error, Result};
 
+pub mod parser;
+
 pub struct CaptureDevice {
     seq: alsa::Seq,
 }
@@ -131,7 +133,7 @@ pub enum CallcbackCtrl {
     Break,
 }
 
-/// Read all events from the capture device and call `f` for each event.
+/// すべてのイベントを読み込む
 pub fn read_all_cb(
     guard: &mut CaptureGurad<'_>,
     f: impl Fn(alsa::seq::Event) -> CallcbackCtrl,
@@ -144,7 +146,7 @@ pub fn read_all_cb(
     }
 }
 
-/// Read all events from the capture device and call `f` for each event.
+/// 同じキーは更新周期の最後の値のみが有効になる
 pub fn read_sync_cb(
     guard: &mut CaptureGurad<'_>,
     interval: std::time::Duration,

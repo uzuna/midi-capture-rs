@@ -10,3 +10,11 @@ alsa = "0.8"
 libc = "0.2.149"
 log = "0.4.20"
 thiserror = "1"
+
+[features]
+default = []
+nano_kontrol2 = []
+
+[[example]]
+name = "nano_kontrol2"
+required-features = ["nano_kontrol2"]
