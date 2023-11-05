@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 alsa = "0.8"
-libc = "0.2.149"
-log = "0.4.20"
+libc = "0.2"
+log = "0.4"
 thiserror = "1"
 
 [features]
