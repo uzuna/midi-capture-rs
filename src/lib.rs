@@ -1,4 +1,6 @@
 pub mod error;
+use std::time::Duration;
+
 use alsa::seq::{self, EvCtrl};
 pub use error::{Error, Result};
 
@@ -29,12 +31,22 @@ impl CaptureDevice {
 
     pub fn get(&self) -> crate::Result<CaptureGurad> {
         let input = self.seq.input();
-        Ok(CaptureGurad { input })
+        use alsa::PollDescriptors;
+        let pollfds = (&self.seq, Some(alsa::Direction::Capture)).get().unwrap();
+
+        Ok(CaptureGurad { input, pollfds })
     }
+}
+
+#[derive(Debug)]
+pub enum PollEvent {
+    Timeout,
+    Ready,
 }
 
 pub struct CaptureGurad<'a> {
     input: alsa::seq::Input<'a>,
+    pollfds: Vec<libc::pollfd>,
 }
 
 impl CaptureGurad<'_> {
@@ -44,6 +56,14 @@ impl CaptureGurad<'_> {
         }
         let ev = self.input.event_input()?;
         Ok(Some(ev))
+    }
+    pub fn poll(&mut self, timeout_ms: std::time::Duration) -> crate::Result<PollEvent> {
+        let wait = std::cmp::max(1, timeout_ms.as_millis() as i32);
+        match alsa::poll::poll(&mut self.pollfds, wait)? {
+            0 => Ok(PollEvent::Timeout),
+            1 => Ok(PollEvent::Ready),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -87,8 +107,8 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> crate::Result<()> 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EvKey {
-    channel: u8,
-    param: u32,
+    pub channel: u8,
+    pub param: u32,
 }
 
 impl EvKey {
@@ -120,6 +140,7 @@ pub fn read_all_cb(
         if let Some(ev) = guard.read_event()? {
             f(ev);
         }
+        guard.poll(Duration::from_millis(100))?;
     }
 }
 
@@ -130,7 +151,8 @@ pub fn read_sync_cb(
     f: impl Fn(std::collections::HashMap<EvKey, i32>) -> CallcbackCtrl,
 ) -> crate::Result<()> {
     use std::collections::HashMap;
-    let mut next = std::time::Instant::now().checked_add(interval).unwrap();
+    use std::time::Instant;
+    let mut next = Instant::now().checked_add(interval).unwrap();
     let mut evt: HashMap<EvKey, i32> = HashMap::new();
     loop {
         if let Some(ev) = guard.read_event()? {
@@ -140,8 +162,13 @@ pub fn read_sync_cb(
         }
         if next.elapsed() >= interval {
             f(evt);
-            next = std::time::Instant::now().checked_add(interval).unwrap();
+            next = Instant::now().checked_add(interval).unwrap();
             evt = HashMap::new();
         }
+        let wait = match next.checked_duration_since(Instant::now()) {
+            Some(wait) => wait,
+            None => Duration::from_millis(2),
+        };
+        guard.poll(wait)?;
     }
 }
