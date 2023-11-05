@@ -1,4 +1,4 @@
-use super::FromMidi;
+use super::{FromMidi, State};
 use crate::EvKey;
 
 pub fn parse(m: std::collections::HashMap<EvKey, i32>) -> Vec<Event> {
@@ -30,21 +30,6 @@ impl Event {
         } else if let Some(key) = Slider::from_midi(key, value) {
             Some(Self::Slider(key))
         } else { Knob::from_midi(key, value).map(Self::Knob) }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum State {
-    On,
-    Off,
-}
-
-impl From<i32> for State {
-    fn from(v: i32) -> Self {
-        match v {
-            0 => Self::Off,
-            _ => Self::On,
-        }
     }
 }
 
