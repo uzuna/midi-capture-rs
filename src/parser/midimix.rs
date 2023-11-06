@@ -2,11 +2,63 @@ use crate::EvKey;
 
 use super::{FromMidi, State};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 
+
+#[derive(Debug)]
+pub enum Event {
+    Button(Button),
+    ChButton(ChButton),
+    Slider(Slider),
+    Knob(Knob),
+}
+
+impl Event {
+    pub fn parse(key: EvKey, value: i32) -> Option<Self> {
+        if let Some(key) = Button::from_midi(key, value) {
+            Some(Self::Button(key))
+        } else if let Some(key) = ChButton::from_midi(key, value) {
+            Some(Self::ChButton(key))
+        } else if let Some(key) = Slider::from_midi(key, value) {
+            Some(Self::Slider(key))
+        } else {
+            Knob::from_midi(key, value).map(Self::Knob)
+        }
+    }
+}
+
+/// TODO CCではなくNoteなので扱いを考える
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button{
+    BankLeft(State),
+    BankRight(State),
+    Solo(State),
+}
+
+impl FromMidi for Button {
+    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+        let key = match key {
+            EvKey {
+                channel: 0,
+                param: 25,
+            } => Button::BankLeft,
+            EvKey {
+                channel: 0,
+                param: 26,
+            } => Button::BankRight,
+            EvKey {
+                channel: 0,
+                param: 27,
+            } => Button::Solo,
+            _ => return None,
+        };
+        Some(key(value.into()))
+    }
+}
+
+// TODO CCではなくNoteなので扱いを考える
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChButton {
     Mute(Ch, State),
-    Solo(Ch, State),
     Record(Ch, State),
 }
 
@@ -24,7 +76,6 @@ impl FromMidi for ChButton {
         let ch = Ch::from(no_index);
         let chb = match class_index {
             0 => Self::Mute(ch, value.into()),
-            1 => Self::Solo(ch, value.into()),
             2 => Self::Record(ch, value.into()),
             _ => unreachable!(),
         };
@@ -44,6 +95,7 @@ pub enum Ch {
     H,
     Master,
 }
+
 impl From<u32> for Ch {
     fn from(v: u32) -> Self {
         match v {
@@ -65,12 +117,20 @@ pub struct Slider {
     pub ch: Ch,
     pub value: u8,
 }
+
 impl Slider {
     const RANGE: &[u32] = &[19, 23, 27, 31, 49, 53, 57, 61];
+    const MASTER: u32 = 62;
 }
 
 impl FromMidi for Slider {
     fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+        if key.param == Self::MASTER {
+            return Some(Self {
+                ch: Ch::Master,
+                value: value as u8,
+            });
+        }
         let index = Self::RANGE.iter().position(|&x| x == key.param)?;
         let ch = Ch::from(index as u32);
         let value = value as u8;
