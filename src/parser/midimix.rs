@@ -1,8 +1,6 @@
-use crate::EvKey;
+use crate::MidiEvent;
 
 use super::{FromMidi, State};
-
-
 
 #[derive(Debug)]
 pub enum Event {
@@ -13,7 +11,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub fn parse(key: EvKey, value: i32) -> Option<Self> {
+    pub fn parse(key: MidiEvent, value: i32) -> Option<Self> {
         if let Some(key) = Button::from_midi(key, value) {
             Some(Self::Button(key))
         } else if let Some(key) = ChButton::from_midi(key, value) {
@@ -28,30 +26,48 @@ impl Event {
 
 /// TODO CCではなくNoteなので扱いを考える
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Button{
+pub enum Button {
     BankLeft(State),
     BankRight(State),
     Solo(State),
 }
 
 impl FromMidi for Button {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+    fn from_midi(key: MidiEvent, _value: i32) -> Option<Self> {
         let key = match key {
-            EvKey {
+            MidiEvent::NoteOn {
                 channel: 0,
-                param: 25,
-            } => Button::BankLeft,
-            EvKey {
+                note: 25,
+                ..
+            } => Button::BankLeft(State::On),
+            MidiEvent::NoteOn {
                 channel: 0,
-                param: 26,
-            } => Button::BankRight,
-            EvKey {
+                note: 26,
+                ..
+            } => Button::BankRight(State::On),
+            MidiEvent::NoteOn {
                 channel: 0,
-                param: 27,
-            } => Button::Solo,
+                note: 27,
+                ..
+            } => Button::Solo(State::On),
+            MidiEvent::NoteOff {
+                channel: 0,
+                note: 25,
+                ..
+            } => Button::BankLeft(State::Off),
+            MidiEvent::NoteOff {
+                channel: 0,
+                note: 26,
+                ..
+            } => Button::BankRight(State::Off),
+            MidiEvent::NoteOff {
+                channel: 0,
+                note: 27,
+                ..
+            } => Button::Solo(State::Off),
             _ => return None,
         };
-        Some(key(value.into()))
+        Some(key)
     }
 }
 
@@ -63,20 +79,30 @@ pub enum ChButton {
 }
 
 impl ChButton {
-    const RANGE: (u32, u32) = (1, 27);
+    const RANGE: (u8, u8) = (1, 27);
 }
 
 impl FromMidi for ChButton {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
-        if Self::RANGE.0 > key.param || key.param > Self::RANGE.1 {
+    fn from_midi(key: MidiEvent, _value: i32) -> Option<Self> {
+        let (note, state) = {
+            if let MidiEvent::NoteOn { note, .. } = key {
+                (note, State::On)
+            } else if let MidiEvent::NoteOff { note, .. } = key {
+                (note, State::Off)
+            } else {
+                return None;
+            }
+        };
+
+        if Self::RANGE.0 > note || note > Self::RANGE.1 {
             return None;
         }
-        let class_index = (key.param - 1) % 3;
-        let no_index = (key.param - 1) / 3;
-        let ch = Ch::from(no_index);
+        let class_index = (note - 1) % 3;
+        let no_index = (note - 1) / 3;
+        let ch = Ch::from(no_index as u32);
         let chb = match class_index {
-            0 => Self::Mute(ch, value.into()),
-            2 => Self::Record(ch, value.into()),
+            0 => Self::Mute(ch, state),
+            2 => Self::Record(ch, state),
             _ => unreachable!(),
         };
         Some(chb)
@@ -124,14 +150,17 @@ impl Slider {
 }
 
 impl FromMidi for Slider {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
-        if key.param == Self::MASTER {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
+        let MidiEvent::Control { channel: _, param } = key else {
+            return None;
+        };
+        if param == Self::MASTER {
             return Some(Self {
                 ch: Ch::Master,
                 value: value as u8,
             });
         }
-        let index = Self::RANGE.iter().position(|&x| x == key.param)?;
+        let index = Self::RANGE.iter().position(|&x| x == param)?;
         let ch = Ch::from(index as u32);
         let value = value as u8;
         Some(Self { ch, value })
@@ -160,13 +189,16 @@ impl Knob {
 }
 
 impl FromMidi for Knob {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
+        let MidiEvent::Control { channel: _, param } = key else {
+            return None;
+        };
         let index = Self::RANGE.iter().position(|&x| {
             let (start, end) = x;
-            start <= key.param && key.param <= end
+            start <= param && param <= end
         })?;
         let ch = Ch::from(index as u32);
-        let no = (key.param - Self::RANGE[index].0) as u8;
+        let no = (param - Self::RANGE[index].0) as u8;
         let value = value as u8;
         Some(Self { ch, no, value })
     }

@@ -1,4 +1,4 @@
-use midi_capture::{CaptureDevice, parser};
+use midi_capture::{parser::midimix, CaptureDevice};
 
 fn main() -> midi_capture::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -16,9 +16,10 @@ fn main() -> midi_capture::Result<()> {
         });
     } else if args.len() > 1 && args[1] == "allp" {
         return midi_capture::read_all_cb(&mut guard, |ev| {
-            if let Some(data) = ev.get_data::<alsa::seq::EvCtrl>() {
-                let event = midi_capture::parser::midimix::Event::parse((&data).into(), data.value);
-                println!("{:?}", event);
+            if let Some((key, value)) = midi_capture::MidiEvent::parse(ev) {
+                if let Some(ev) = midimix::Event::parse(key, value) {
+                    println!("{:?}", ev);
+                }
             }
             midi_capture::CallcbackCtrl::Continue
         });

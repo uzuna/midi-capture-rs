@@ -1,9 +1,9 @@
 //! Exmaple for KORG nanoKONTROL2
 
 use midi_capture::parser::nano_control2;
-use midi_capture::{CallcbackCtrl, EvKey};
+use midi_capture::{CallcbackCtrl, MidiEvent};
 
-fn callback(ev: std::collections::HashMap<EvKey, i32>) -> CallcbackCtrl {
+fn callback(ev: std::collections::HashMap<MidiEvent, i32>) -> CallcbackCtrl {
     println!("{:?}", nano_control2::parse(ev));
     CallcbackCtrl::Continue
 }

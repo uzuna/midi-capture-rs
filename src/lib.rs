@@ -1,7 +1,7 @@
 pub mod error;
 use std::time::Duration;
 
-use alsa::seq::{self, EvCtrl};
+use alsa::seq::{self, EvCtrl, EvNote, Event, EventType};
 pub use error::{Error, Result};
 
 pub mod parser;
@@ -108,22 +108,52 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> crate::Result<()> 
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EvKey {
-    pub channel: u8,
-    pub param: u32,
+pub enum MidiEvent {
+    Control { channel: u8, param: u32 },
+    NoteOn { channel: u8, note: u8, velocity: u8 },
+    NoteOff { channel: u8, note: u8, velocity: u8 },
 }
 
-impl EvKey {
-    pub fn new(channel: u8, param: u32) -> Self {
-        Self { channel, param }
+impl MidiEvent {
+    pub fn parse(ev: Event<'_>) -> Option<(Self, i32)> {
+        if let Some(data) = ev.get_data::<alsa::seq::EvCtrl>() {
+            Some(((&data).into(), data.value))
+        } else {
+            let evtype = ev.get_type();
+            match evtype {
+                seq::EventType::Noteon | seq::EventType::Noteoff => {
+                    let data = ev.get_data::<alsa::seq::EvNote>().unwrap();
+                    Some(((evtype, &data).into(), data.velocity.into()))
+                }
+                _ => None,
+            }
+        }
     }
 }
 
-impl From<&EvCtrl> for EvKey {
+impl From<&EvCtrl> for MidiEvent {
     fn from(ev: &EvCtrl) -> Self {
-        Self {
+        Self::Control {
             channel: ev.channel,
             param: ev.param,
+        }
+    }
+}
+
+impl From<(EventType, &EvNote)> for MidiEvent {
+    fn from((evtype, ev): (EventType, &EvNote)) -> Self {
+        match evtype {
+            EventType::Noteon => Self::NoteOn {
+                channel: ev.channel,
+                note: ev.note,
+                velocity: ev.velocity,
+            },
+            EventType::Noteoff => Self::NoteOff {
+                channel: ev.channel,
+                note: ev.note,
+                velocity: ev.velocity,
+            },
+            _ => unreachable!(),
         }
     }
 }
@@ -150,16 +180,16 @@ pub fn read_all_cb(
 pub fn read_sync_cb(
     guard: &mut CaptureGurad<'_>,
     interval: std::time::Duration,
-    f: impl Fn(std::collections::HashMap<EvKey, i32>) -> CallcbackCtrl,
+    f: impl Fn(std::collections::HashMap<MidiEvent, i32>) -> CallcbackCtrl,
 ) -> crate::Result<()> {
     use std::collections::HashMap;
     use std::time::Instant;
     let mut next = Instant::now().checked_add(interval).unwrap();
-    let mut evt: HashMap<EvKey, i32> = HashMap::new();
+    let mut evt: HashMap<MidiEvent, i32> = HashMap::new();
     loop {
         if let Some(ev) = guard.read_event()? {
-            if let Some(data) = ev.get_data::<alsa::seq::EvCtrl>() {
-                evt.insert((&data).into(), data.value);
+            if let Some((k, v)) = MidiEvent::parse(ev) {
+                evt.insert(k, v);
             }
         }
         if next.elapsed() >= interval {

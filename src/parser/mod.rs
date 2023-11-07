@@ -3,10 +3,11 @@
 #[cfg(feature = "nano_kontrol2")]
 pub mod nano_control2;
 
+#[cfg(feature = "midimix")]
 pub mod midimix;
 
 pub trait FromMidi {
-    fn from_midi(key: crate::EvKey, value: i32) -> Option<Self>
+    fn from_midi(key: crate::MidiEvent, value: i32) -> Option<Self>
     where
         Self: Sized;
 }
