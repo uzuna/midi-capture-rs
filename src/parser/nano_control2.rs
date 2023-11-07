@@ -1,7 +1,7 @@
-use super::FromMidi;
-use crate::EvKey;
+use super::{FromMidi, State};
+use crate::MidiEvent;
 
-pub fn parse(m: std::collections::HashMap<EvKey, i32>) -> Vec<Event> {
+pub fn parse(m: std::collections::HashMap<MidiEvent, i32>) -> Vec<Event> {
     m.iter()
         .filter_map(|(k, v)| Event::parse(*k, *v))
         .collect::<Vec<Event>>()
@@ -18,7 +18,7 @@ pub enum Event {
 }
 
 impl Event {
-    fn parse(key: EvKey, value: i32) -> Option<Self> {
+    fn parse(key: MidiEvent, value: i32) -> Option<Self> {
         if let Some(key) = TransportButton::from_midi(key, value) {
             Some(Self::TransportButton(key))
         } else if let Some(key) = TrackButton::from_midi(key, value) {
@@ -29,21 +29,8 @@ impl Event {
             Some(Self::ChButton(key))
         } else if let Some(key) = Slider::from_midi(key, value) {
             Some(Self::Slider(key))
-        } else { Knob::from_midi(key, value).map(Self::Knob) }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum State {
-    On,
-    Off,
-}
-
-impl From<i32> for State {
-    fn from(v: i32) -> Self {
-        match v {
-            0 => Self::Off,
-            _ => Self::On,
+        } else {
+            Knob::from_midi(key, value).map(Self::Knob)
         }
     }
 }
@@ -55,13 +42,13 @@ pub enum TrackButton {
 }
 
 impl FromMidi for TrackButton {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
         let key = match key {
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 58,
             } => TrackButton::Prev,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 59,
             } => TrackButton::Next,
@@ -79,17 +66,17 @@ pub enum MarkerButton {
     Next(State),
 }
 impl FromMidi for MarkerButton {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
         let key = match key {
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 60,
             } => MarkerButton::Set,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 61,
             } => MarkerButton::Prev,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 62,
             } => MarkerButton::Next,
@@ -110,25 +97,25 @@ pub enum TransportButton {
 }
 
 impl FromMidi for TransportButton {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
         let key = match key {
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 43,
             } => TransportButton::Rewind,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 44,
             } => TransportButton::FastForward,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 42,
             } => TransportButton::Stop,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 41,
             } => TransportButton::Play,
-            EvKey {
+            MidiEvent::Control {
                 channel: 0,
                 param: 45,
             } => TransportButton::Record,
@@ -183,16 +170,20 @@ impl ChButton {
 }
 
 impl FromMidi for ChButton {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
-        let chb = match key.param {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
+        let MidiEvent::Control { channel: _, param } = key else {
+            return None;
+        };
+
+        let chb = match param {
             Self::SOLO_START..=Self::SOLO_END => {
-                Self::Solo(Ch::from(key.param - Self::SOLO_START), value.into())
+                Self::Solo(Ch::from(param - Self::SOLO_START), value.into())
             }
             Self::MUTE_START..=Self::MUTE_END => {
-                Self::Mute(Ch::from(key.param - Self::MUTE_START), value.into())
+                Self::Mute(Ch::from(param - Self::MUTE_START), value.into())
             }
             Self::RECORD_START..=Self::RECORD_END => {
-                Self::Record(Ch::from(key.param - Self::RECORD_START), value.into())
+                Self::Record(Ch::from(param - Self::RECORD_START), value.into())
             }
             _ => return None,
         };
@@ -210,11 +201,14 @@ impl Slider {
 }
 
 impl FromMidi for Slider {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
-        if key.param < Self::RANGE.0 || key.param > Self::RANGE.1 {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
+        let MidiEvent::Control { channel: _, param } = key else {
+            return None;
+        };
+        if param < Self::RANGE.0 || param > Self::RANGE.1 {
             return None;
         }
-        let ch = Ch::from(key.param);
+        let ch = Ch::from(param);
         let value = value as u8;
         Some(Slider { ch, value })
     }
@@ -231,11 +225,14 @@ impl Knob {
 }
 
 impl FromMidi for Knob {
-    fn from_midi(key: EvKey, value: i32) -> Option<Self> {
-        if key.param < Self::RANGE.0 || key.param > Self::RANGE.1 {
+    fn from_midi(key: MidiEvent, value: i32) -> Option<Self> {
+        let MidiEvent::Control { channel: _, param } = key else {
+            return None;
+        };
+        if param < Self::RANGE.0 || param > Self::RANGE.1 {
             return None;
         }
-        let ch = Ch::from(key.param - Self::RANGE.0);
+        let ch = Ch::from(param - Self::RANGE.0);
         let value = value as u8;
         Some(Knob { ch, value })
     }
